@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gather-logs-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: log-gatherer
+        image: chasechristensen/pod-log-gatherer:v0.01
+        env:
+        - name: NAMESPACE
+          value: "tiledb-cloud"
+        - name: OUTPUT_DIR
+          value: "/logs"
+        - name: SINCE
+          value: "1h"
+        - name: METRICS_SERVER_CHECK
+          value: "true"
+        - name: HOSTNAMES
+          value: "jupyterhub.tiledb.example.com oauth2.tiledb.example.com api.tiledb.example.com console.tiledb.example.com"
+        - name: MARIADB_HOST
+          value: "tiledb-cloud-mariadb"
+        - name: MARIADB_PORT
+          value: "3306"
+        - name: MARIADB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mariadb-secret
+              key: password
+        - name: MARIADB_USER
+          values: "tiledb_user"              
+        - name: MARIADB_DATABASE
+          value: "tiledb_rest"
+        - name: MARIADB_TABLE
+          value: "arrays"
+        volumeMounts:
+        - name: logs
+          mountPath: /logs
+      restartPolicy: Never
+      volumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: logs-pvc
+  backoffLimit: 4        
