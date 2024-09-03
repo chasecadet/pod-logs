@@ -3,9 +3,12 @@
 NAMESPACE="${NAMESPACE:-default}"
 OUTPUT_DIR="${OUTPUT_DIR:-/logs}"
 SINCE="${SINCE:-1h}"
-HOSTNAMES=("hostname1" "hostname2" "hostname3") # Add your hostnames here
+HOSTNAMES=("jupyterhub.tiledb.example.com oauth2.tiledb.example.com api.tiledb.example.com console.tiledb.example.com") # Add your hostnames here
 METRICS_SERVER_CHECK=true # Set to false if you don't want to check for the metrics server
 LOG_FILE="${OUTPUT_DIR}/gather-logs.log"
+ERROR_LOG_FILE="${OUTPUT_DIR}/error-log.log"
+CLUSTER_STATE_FILE="${OUTPUT_DIR}/cluster-state.log"
+LLM_PROMPT_FILE="${OUTPUT_DIR}/llm-prompt.txt"
 MARIADB_HOST="${MARIADB_HOST:-localhost}"
 MARIADB_PORT="${MARIADB_PORT:-3306}"
 MARIADB_USER="${MARIADB_USER:-root}"
@@ -110,36 +113,52 @@ check_ingress_resources() {
   done
 }
 
-# Check DNS resolution for the specified hostnames
-check_dns
+# Function to scan logs for errors
+check_logs_for_errors() {
+  echo "Scanning logs for errors..."
+  grep -i "error\|failed\|exception" "${OUTPUT_DIR}"/*.log > "$ERROR_LOG_FILE"
+  if [ -s "$ERROR_LOG_FILE" ]; then
+    echo "Errors found in logs. Details are stored in $ERROR_LOG_FILE"
+  else
+    echo "No errors found in logs."
+  fi
+}
 
-# Check for the Metrics Server if enabled
-if [ "$METRICS_SERVER_CHECK" = true ]; then
-  check_metrics_server
-fi
+# Function to gather cluster-wide state information
+gather_cluster_state() {
+  echo "Gathering cluster-wide state information..."
+  kubectl get all --all-namespaces > "$CLUSTER_STATE_FILE"
+  kubectl describe nodes >> "$CLUSTER_STATE_FILE"
+  kubectl get events --all-namespaces >> "$CLUSTER_STATE_FILE"
+  echo "Cluster state information gathered and stored in $CLUSTER_STATE_FILE"
+}
 
-# Check pod readiness and print events for non-ready pods
-check_pod_readiness
-
-# Check MariaDB user access and roles
-check_mariadb_user_access
-
-# Check Ingress controller and Ingress resources
-check_ingress_resources
-
-# Get all pod names in the namespace
-pods=$(kubectl get pods -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}')
-
-for pod in $pods; do
-  # Get all containers in the pod
-  containers=$(kubectl get pod "$pod" -n "$NAMESPACE" -o jsonpath='{.spec.containers[*].name}')
+# Function to generate a prompt for the LLM
+generate_llm_prompt() {
+  echo "Generating LLM prompt based on gathered data..."
+  echo "Cluster State Overview:" > "$LLM_PROMPT_FILE"
+  tail -n 20 "$CLUSTER_STATE_FILE" >> "$LLM_PROMPT_FILE"
   
-  for container in $containers; do
-    # Fetch logs for each container from the past hour
-    log_file="${OUTPUT_DIR}/${pod}_${container}.log"
-    kubectl logs "$pod" -c "$container" -n "$NAMESPACE" --since="$SINCE" > "$log_file"
-    echo "Collected logs for pod: $pod, container: $container from the past $SINCE"
-  done
-done
+  if [ -s "$ERROR_LOG_FILE" ]; then
+    echo "" >> "$LLM_PROMPT_FILE"
+    echo "Errors Detected:" >> "$LLM_PROMPT_FILE"
+    tail -n 10 "$ERROR_LOG_FILE" >> "$LLM_PROMPT_FILE"
+  else
+    echo "" >> "$LLM_PROMPT_FILE"
+    echo "No significant errors detected in the logs." >> "$LLM_PROMPT_FILE"
+  fi
 
-echo "Logs collected in $OUTPUT_DIR"
+  echo "" >> "$LLM_PROMPT_FILE"
+  echo "Suggested areas to investigate:" >> "$LLM_PROMPT_FILE"
+  echo "1. Review the pods that are not ready." >> "$LLM_PROMPT_FILE"
+  echo "2. Examine the Ingress resources and their configurations." >> "$LLM_PROMPT_FILE"
+  echo "3. Check DNS resolution consistency and Metrics Server availability." >> "$LLM_PROMPT_FILE"
+  
+  echo "LLM prompt generated and stored in $LLM_PROMPT_FILE"
+}
+
+# Execute functions in sequence
+check_dns
+check_metrics_server
+check_pod_readiness
+check_mariadb_user

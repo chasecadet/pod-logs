@@ -5,6 +5,7 @@ metadata:
 spec:
   template:
     spec:
+      ttlSecondsAfterFinished: 360  # Keep the job pod for 10 minutes after completion    
       containers:
       - name: log-gatherer
         image: chasechristensen/pod-log-gatherer:v0.01

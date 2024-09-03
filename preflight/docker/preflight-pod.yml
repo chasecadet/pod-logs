@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tiledb-preinstall-check
+  namespace: tiledb-cloud
+spec:
+  containers:
+  - name: preinstall-check
+    image: tiledb-preinstall-check:latest
+    env:
+    - name: KUBECONFIG
+      value: "/root/.kube/config"
+    volumeMounts:
+    - name: kube-config
+      mountPath: /root/.kube/config
+      subPath: config
+  restartPolicy: Never
+  volumes:
+  - name: kube-config
+    configMap:
+      name: kube-config
