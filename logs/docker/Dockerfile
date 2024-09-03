@@ -1,7 +1,7 @@
 # Use a Debian base image
 FROM debian:latest
 
-# Install necessary tools and kubectl
+# Install necessary tools 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     curl \
@@ -9,11 +9,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mariadb-client \
     apt-transport-https \
     gnupg2 \
-    lsb-release \
-    && curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
-    && echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" > /etc/apt/sources.list.d/kubernetes.list \
-    && apt-get update && apt-get install -y kubectl \
-    && rm -rf /var/lib/apt/lists/*
+    lsb-release 
+
+# Install Kubectl 
+RUN curl -kLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" 
+RUN  chmod +x kubectl 
+RUN  mkdir -p ~/.local/bin \
+&& mv ./kubectl ~/.local/bin/kubectl 
+# Adding to my env variable
+ENV PATH="$HOME/.local/bin:$PATH" 
+
+
+RUN kubectl version --client
 
 # Copy the script into the container
 COPY gather-logs.sh /usr/local/bin/gather-logs.sh
